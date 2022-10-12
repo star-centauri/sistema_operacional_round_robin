@@ -5,7 +5,7 @@ enum status { PARADO, BLOQUEADO, EXECUTANDO_CPU, EXECUTANDO_IO };
 enum io { DISCO = 3, MAGNETICA = 5, IMPRESSORA = 7 };
 
 #define QUANTUM 5
-#define QTD_PROCESSOS 100
+#define QTD_PROCESSOS 20
 
 /*
 Criar um contrutor chamado TipoIO que conterá:
@@ -56,58 +56,98 @@ Criar um contrutor chamado ESCALONADOR que conterá:
 . Fila de alta prioridade
 . Fila de baixa prioridade
 . Fila entradaSaida
-. Fila de espera
+. lista de espera: todos os processos
 */
 typedef struct
 {
-    fifo altaPrioridade[QTD_PROCESSOS];
-    fifo baixaPrioridade[QTD_PROCESSOS];
-    fifo entradaSaida[QTD_PROCESSOS];
-    fifo espera[QTD_PROCESSOS];
+    fifo altaPrioridade;
+    fifo baixaPrioridade;
+    fifo entradaSaida;
+    processo espera[QTD_PROCESSOS];
 } escalonador;
 
 fifo create();
 void enqueue(processo dado, fifo *f);
 processo dequeue(fifo *f);
 void printProcessos(fifo *f);
+void runProcesses(escalonador *filas);
+processo getProcessosEspera(processo *espera[QTD_PROCESSOS], int elapsedTime);
 
 void main() {
     /*
     Menu:
      1 - Introdução
-     2 - Criar processos quantidade de 0 - 100
+     2 - Criar processos quantidade de 0 - 20
      3 - Executar os processos
      4 - Parar processos
      5 - Detalhes
      6 - Zerar**
     */
+   escalonador filas;
+   filas.altaPrioridade = create();
+   filas.baixaPrioridade = create();
+   filas.entradaSaida = create();
 
-   fifo teste = create();
-
-   processo processo1;
-   processo1.pid = 1;
-   processo1.prioridade = 10;
-
-    enqueue(processo1, &teste);
-
-   processo processo2;
-   processo2.pid = 2;
-   processo2.prioridade = 20;
-
-    enqueue(processo2, &teste);
-    printProcessos(&teste);
-
-   processo processo3;
-   processo3.pid = 3;
-   processo3.prioridade = 30;
-
-   processo removido2 = dequeue(&teste);
-
-   printProcessos(&teste);
-   enqueue(processo3, &teste);
-   printProcessos(&teste);
+    runProcesses(&filas);
 }
 
+// =============== BEGIN ALGORITMO ROUND ROBIN =============== //
+void runProcesses(escalonador *filas) {
+    int run = 1; // MANTER EXECUÇÃO DO ALGORITMO ATÉ SE SOLICITADO PARAR
+    int elapsedTime = 0; // SIMULA O TEMPO CORRIDO DENTRO DO LOOP (VAI SER IMPORTANTE PARA O TEMPO DE CHEGADA)
+
+    // LOOP DE TODA EXECUÇÃO DO ALGORITMO
+    while (run)
+    {
+        int countQuantumAlta;
+        // VERIFIFCO SE TEM ALGUM PROCESSO NOVO PARA ADICIONAR A LISTA DE PRIORIDADES
+        processo pronto = getProcessosEspera(&filas->espera, elapsedTime);
+        filas->altaPrioridade.rows[filas->altaPrioridade.end] = pronto;
+        
+        // LOOP EXECUTA ALTA PRIORIDADE (AINDA SEM VERIFICACAO IO)
+        processo executa = dequeue(&filas->altaPrioridade);
+        for ( countQuantumAlta = 0; countQuantumAlta < QUANTUM; countQuantumAlta++ )
+        {
+            // PARAR LOOP CASO JA TENHA FEITO O PROCESSO POR COMPLETO
+            if ( executa.tempoProcessado == executa.tempoTotalDeProcesso ) { 
+                break;
+            }
+
+            executa.tempoProcessado++;
+        }
+        // PROCESSO NAO FINALIZOU NO PRIMEIRO QUANTUM, VAI PARA ESPERA
+        if ( executa.tempoProcessado != executa.tempoTotalDeProcesso ) {
+            filas->entradaSaida.rows[filas->entradaSaida.end] = executa;
+        }
+        
+        elapsedTime++;
+    }
+    
+}
+
+/// @brief FAZ A BUSCAR PELOS PROCESSOS NOVOS QUE ESTÃO PRONTO PARA O ESCALONADOR
+/// @param espera 
+/// @param elapsedTime 
+/// @return processo 
+processo getProcessosEspera(processo *espera[QTD_PROCESSOS], int elapsedTime) {
+    processo pronto;
+    for (int i = 0; i < QTD_PROCESSOS; i++)
+    {
+        if (espera[i]->tempoChegada <= elapsedTime) {
+            pronto = *espera[i];
+            
+            for (int j = i; i < QTD_PROCESSOS - 1; j++)  // DELETAR O ITEM E ATUALIZAR LISTA
+            {  
+                espera[j] = espera[j+1];  
+            }  
+
+            return pronto;
+        }
+    }
+}
+// =============== END ALGORITMO ROUND ROBIN =============== //
+
+// =============== BEGIN ALGORITMO DE FILA =============== //
 fifo create() {
     fifo fila;
     fila.end = 0;
@@ -153,3 +193,4 @@ void printProcessos(fifo *f) {
     }   
     printf("-----------------------------\n");
 }
+// =============== END ALGORITMO DE FILA =============== //
