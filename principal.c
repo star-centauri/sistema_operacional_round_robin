@@ -6,7 +6,8 @@ enum status { PARADO, BLOQUEADO, EXECUTANDO_CPU, EXECUTANDO_IO };
 enum io { DISCO = 3, MAGNETICA = 5, IMPRESSORA = 7 };
 
 #define QUANTUM 5
-#define QTD_PROCESSOS 10
+#define QTD_PROCESSOS 2
+#define QTD_IO 5
 
 /*
 Criar um contrutor chamado TipoIO que conterá:
@@ -37,7 +38,7 @@ typedef struct
     int tempoDeServico;
     enum status situacao;
     int tempoProcessado;
-    TipoIO entradaEhSaida[5];
+    TipoIO entradaEhSaida[QTD_IO];
 } processo;
 
 /*
@@ -57,7 +58,6 @@ Criar um contrutor chamado ESCALONADOR que conterá:
 . Fila de alta prioridade
 . Fila de baixa prioridade
 . Fila entradaSaida
-. espera de novo: todos os processos
 . lista de novo: todos os processos
 */
 typedef struct
@@ -65,7 +65,6 @@ typedef struct
     fifo altaPrioridade;
     fifo baixaPrioridade;
     fifo entradaSaida;
-    processo espera[QTD_PROCESSOS];
     processo novo[QTD_PROCESSOS];
 } escalonador;
 
@@ -76,6 +75,7 @@ void printProcessos(fifo *f);
 void runProcesses(escalonador *filas);
 processo getProcessosNovo(processo novo[QTD_PROCESSOS], int elapsedTime);
 processo randomProcesso (int pid);
+int verificarSeExisteProcessoExecutar( escalonador *filas );
 
 int main() {
     /*
@@ -93,7 +93,28 @@ int main() {
    for (int i = 0; i < QTD_PROCESSOS; i++)
    {
         filas.novo[i] = randomProcesso(i+1);
-        printf("PROCESSO CRIADO PID: %d\n", filas.novo[i].pid);
+
+        printf("-----------------------------------------------\n");
+
+        printf("PROCESSO CRIADO PID: %d \n", filas.novo[i].pid);
+        printf("TEMPO DE CHEGADA: %d \n", filas.novo[i].tempoChegada);
+        printf("TEMPO DE SERVICO: %d \n", filas.novo[i].tempoDeServico);
+
+        for (int j = 0; j < QTD_IO; j++)
+        {
+            if ( filas.novo[i].entradaEhSaida[j].tipo == 3 )
+            {
+                printf("TIPO IO %s POR TEMPO DE CHEGADA %d \n", "DISCO", filas.novo[i].entradaEhSaida[j].tempoIo);
+            }
+            else if ( filas.novo[i].entradaEhSaida[j].tipo == 5 ) {
+                printf("TIPO IO %s POR TEMPO DE CHEGADA %d \n", "MAGNETICA", filas.novo[i].entradaEhSaida[j].tempoIo);
+            }
+            else if ( filas.novo[i].entradaEhSaida[j].tipo == 7 ) {
+                printf("TIPO IO %s POR TEMPO DE CHEGADA %d \n", "IMPRESSORA", filas.novo[i].entradaEhSaida[j].tempoIo);
+            }
+        }
+        
+        printf("-----------------------------------------------\n");
    }
    
     runProcesses(&filas);
@@ -105,8 +126,10 @@ int main() {
 void runProcesses(escalonador *filas) {
     int run = 1; // MANTER EXECUÇÃO DO ALGORITMO ATÉ SE SOLICITADO PARAR
     int elapsedTime = 0; // SIMULA O TEMPO CORRIDO DENTRO DO LOOP (VAI SER IMPORTANTE PARA O TEMPO DE CHEGADA)
+    
     processo processoAtual;
     processoAtual.pid = 0; 
+    
     processo ioAtual;
     ioAtual.pid = 0;
     
@@ -114,6 +137,14 @@ void runProcesses(escalonador *filas) {
     while (run)
     {
         int countQuantum;
+
+        // VERIFIFCO SE TEM ALGUM PROCESSO NOVO PARA ADICIONAR A LISTA DE PRIORIDADES
+        processo pronto = getProcessosNovo(filas->novo, elapsedTime);
+        printf("PROCESSO PRONTO: %d \n", pronto.pid);
+
+        if ( pronto.pid != 0 ) {
+            enqueue(pronto, &filas->altaPrioridade, "altaPrioridade");
+        }
         
         processo executa;
         if ( processoAtual.pid == 0 ) {
@@ -121,37 +152,43 @@ void runProcesses(escalonador *filas) {
 
             if ( executa.pid != 0 ) {
                 processoAtual = executa;
-                printf("PROCESSO ATUAL PID: %d\n", processoAtual.pid);
+                printf("PROCESSO ATUAL PID: %d \n", processoAtual.pid);
             }
             else {
                 executa = dequeue(&filas->baixaPrioridade, "baixaPrioridade");
 
                 if ( executa.pid != 0 ) {
                     processoAtual = executa;
-                    printf("PROCESSO ATUAL PID: %d\n", processoAtual.pid);
+                    printf("PROCESSO ATUAL PID: %d \n", processoAtual.pid);
                 }
             }
+        }
+
+        if ( elapsedTime == 30 )
+        {
+            break;
         }
 
         // LOOP CPU
         for ( countQuantum = 0; countQuantum < QUANTUM; countQuantum++ )
         {
-            // VERIFIFCO SE TEM ALGUM PROCESSO NOVO PARA ADICIONAR A LISTA DE PRIORIDADES
-            processo pronto = getProcessosNovo(filas->novo, elapsedTime);
-            printf("PROCESSO PRONTO: %d\n", pronto.pid);
-
-            if ( pronto.pid != 0 ) {
-                enqueue(pronto, &filas->altaPrioridade, "altaPrioridade");
-            }
-            
             // SE TEM PROCESSO RODANDO
             if ( processoAtual.pid == 0 ) {
                 break;
             }
 
-            //SE VAI PARA IO
+            //SE VAI PARA IO - ERRO AQUI toda fez que passa vai adicionar o processo na entrada e saida
             if ( processoAtual.entradaEhSaida[0].tempoDeEntrada <= processoAtual.tempoProcessado ) {
-                printf("PROCESSO PID %d VAI ENTRAR PARA IO %d\n", processoAtual.pid, processoAtual.entradaEhSaida[0].tipo);
+                if ( processoAtual.entradaEhSaida[0].tipo == 3 ) {
+                    printf("PROCESSO PID %d VAI ENTRAR PARA IO %s \n", processoAtual.pid, "DISCO");
+                }
+                else if ( processoAtual.entradaEhSaida[0].tipo == 5 ) {
+                    printf("PROCESSO PID %d VAI ENTRAR PARA IO %s \n", processoAtual.pid, "MAGNETICA");
+                }
+                else if ( processoAtual.entradaEhSaida[0].tipo == 7 ) {
+                    printf("PROCESSO PID %d VAI ENTRAR PARA IO %s \n", processoAtual.pid, "IMPRESSORA");
+                }
+                
                 enqueue(processoAtual, &filas->entradaSaida, "entradaSaida");
 
                 if ( ioAtual.pid == 0 ) {
@@ -164,11 +201,26 @@ void runProcesses(escalonador *filas) {
 
                 if ( ioAtual.pid != 0 ) {
                     if( ioAtual.entradaEhSaida[0].tempoIo == ioAtual.entradaEhSaida[0].tipo ) {
-                        
                         if ( ioAtual.entradaEhSaida[0].tipo == DISCO ) {
+                            // DELETAR IO E ATUALIZAR LISTA
+                            int id;
+                            for (id = 0; id < (QTD_IO-1); id++)
+                            {
+                                ioAtual.entradaEhSaida[id] = ioAtual.entradaEhSaida[id+1];
+                            }
+                            ioAtual.entradaEhSaida[id].tipo = 0;
+
                             enqueue(ioAtual, &filas->baixaPrioridade, "baixaPrioridade");
                         }
                         else {
+                            // DELETAR IO E ATUALIZAR LISTA
+                            int id;
+                            for (id = 0; id < (QTD_IO-1); id++)
+                            {
+                                ioAtual.entradaEhSaida[id] = ioAtual.entradaEhSaida[id+1];
+                            }
+                            ioAtual.entradaEhSaida[id].tipo = 0;
+
                             enqueue(ioAtual, &filas->altaPrioridade, "altaPrioridade");
                         }
                         
@@ -191,7 +243,7 @@ void runProcesses(escalonador *filas) {
             }
 
             processoAtual.tempoProcessado++;
-            printf("PROCESSO PID %d EM EXECUÇÃO, TEMPO QUE JÁ PROCESSOU DE %d E TEMPO RESTANTE\n", processoAtual.pid, processoAtual.tempoProcessado, (processoAtual.tempoDeServico - processoAtual.tempoProcessado));
+            printf("PROCESSO PID %d EM EXECUCAO, TEMPO QUE JA PROCESSOU DE %d E TEMPO RESTANTE %d \n", processoAtual.pid, processoAtual.tempoProcessado, (processoAtual.tempoDeServico - processoAtual.tempoProcessado));
         }
 
         // PROCESSO NAO FINALIZOU NO PRIMEIRO QUANTUM, VAI PARA ESPERA
@@ -201,43 +253,71 @@ void runProcesses(escalonador *filas) {
 
         processoAtual.pid = 0;
         elapsedTime++;
-        //Checar se todas as filas estão vazias e terminar run = 0;
+
+        int existProcesso = verificarSeExisteProcessoExecutar(filas);
+        if ( !existProcesso ) {
+            run = 0;
+        }
     }
     
 }
 
+int verificarSeExisteProcessoExecutar( escalonador *filas ) {
+    if ( filas->altaPrioridade.end != 0 )
+    {
+        return 1;
+    }
+
+    if ( filas->baixaPrioridade.end != 0 )
+    {
+        return 1;
+    }
+    
+    if ( filas->entradaSaida.end != 0 ) {
+        return 1;
+    }
+
+    for (int i = 0; i < QTD_PROCESSOS; i++)
+    {
+        printf("PID existe novo: %d \n", filas->novo[i].pid);
+        
+        if ( filas->novo[i].pid != 0 )
+        {
+            return 1;
+        }
+    }
+    
+    return 0;
+}
+
 /// @brief FAZ A BUSCAR PELOS PROCESSOS NOVOS QUE ESTÃO PRONTO PARA O ESCALONADOR
-/// @param espera 
+/// @param novo 
 /// @param elapsedTime 
 /// @return processo 
 processo getProcessosNovo(processo novo[QTD_PROCESSOS], int elapsedTime) {
     processo pronto;
     pronto.pid = 0;
-    
-    for (int i = 0; i < QTD_PROCESSOS; i++)
-    {
-        printf("TEMPO CHEGADA: %d\n", novo[i].tempoChegada);
-        printf("PID %d\n", pronto.pid);
-        if ( novo[i].pid != 0 && novo[i].tempoChegada <= elapsedTime) {
-            printf("PID %d\n", pronto.pid);
-            pronto = novo[i];
 
+    for (int i = 0; i < QTD_PROCESSOS; i++)
+   {
+        if ( novo[i].pid != 0 &&  novo[i].tempoChegada <= elapsedTime )
+        {
+            pronto = novo[i];
             novo[i].pid = 0;
-        }
-    }
-    // printf("PID %d\n", pronto.pid);
-    // printf("ELAPSED %d\n", elapsedTime);
+        }    
+   }
     return pronto;
 }
 
 processo randomProcesso (int pid) {
+    int segundos = time(0);
     processo proc;
-    srand(time(NULL));
-    int qtdIO = rand() % 6;
+    srand(segundos);
+    int qtdIO = rand() % 5;
 
     proc.pid = pid;
     proc.tempoChegada = pid*2;
-    proc.tempoDeServico = (rand() % 10)+1;
+    proc.tempoDeServico = (rand() % 10)+pid;
     proc.situacao = PARADO;
     proc.tempoProcessado = 0;
     
@@ -291,12 +371,12 @@ fifo create() {
 
 void enqueue(processo dado, fifo *f, char nome[20]) {
     if ( f->end == QTD_PROCESSOS ) {
-        printf("FILA %s ESTÁ CHEIA!\n", nome);
+        printf("FILA %s ESTA CHEIA!\n", nome);
     }
     else {
         f->rows[f->end] = dado;
         f->end++;
-        printf("PROCESSO DE PID %d ADICIONADO A FILA %S\n", dado.pid, nome);
+        printf("PROCESSO DE PID %d ADICIONADO A FILA %s \n", dado.pid, nome);
     }
 }
 
@@ -317,7 +397,7 @@ processo dequeue(fifo *f, char nome[20]) {
         }
         
         f->end--;
-        printf("PROCESSO DE PID %d REMOVIDO DA FILA %s\n", backup.pid, nome);
+        printf("PROCESSO DE PID %d REMOVIDO DA FILA %s \n", backup.pid, nome);
         return backup;
     }
 }
