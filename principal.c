@@ -3,10 +3,10 @@
 #include <time.h>
 
 enum status { PARADO, BLOQUEADO, EXECUTANDO_CPU, EXECUTANDO_IO };
-enum io { DISCO = 3, MAGNETICA = 5, IMPRESSORA = 7 };
+enum io { DISCO = 3, MAGNETICA = 4, IMPRESSORA = 7 };
 
 #define QUANTUM 5
-#define QTD_PROCESSOS 2
+#define QTD_PROCESSOS 1
 #define QTD_IO 5
 
 /*
@@ -71,11 +71,15 @@ typedef struct
 fifo create();
 void enqueue(processo dado, fifo *f, char nome[20]);
 processo dequeue(fifo *f, char nome[20]);
-void printProcessos(fifo *f);
 void runProcesses(escalonador *filas);
 processo getProcessosNovo(processo novo[QTD_PROCESSOS], int elapsedTime);
 processo randomProcesso (int pid);
 int verificarSeExisteProcessoExecutar( escalonador *filas );
+void delay(int number_of_seconds);
+processo staticProcesso (int pid);
+void adicionarProcessoNovoFilaAlta(escalonador *filas, int elapsedTime);
+processo retornarProcessoExecutar(escalonador *filas);
+processo executarProcessoIO(processo ioAtual, escalonador *filas);
 
 int main() {
     /*
@@ -92,6 +96,7 @@ int main() {
 
    for (int i = 0; i < QTD_PROCESSOS; i++)
    {
+        //filas.novo[i] = staticProcesso(i+1);
         filas.novo[i] = randomProcesso(i+1);
 
         printf("-----------------------------------------------\n");
@@ -102,19 +107,21 @@ int main() {
 
         for (int j = 0; j < QTD_IO; j++)
         {
-            if ( filas.novo[i].entradaEhSaida[j].tipo == 3 )
+            if ( filas.novo[i].entradaEhSaida[j].tipo == DISCO )
             {
-                printf("TIPO IO %s POR TEMPO DE CHEGADA %d \n", "DISCO", filas.novo[i].entradaEhSaida[j].tempoIo);
+                printf("TIPO IO %s POR TEMPO DE CHEGADA %d \n", "DISCO", filas.novo[i].entradaEhSaida[j].tempoDeEntrada);
             }
-            else if ( filas.novo[i].entradaEhSaida[j].tipo == 5 ) {
-                printf("TIPO IO %s POR TEMPO DE CHEGADA %d \n", "MAGNETICA", filas.novo[i].entradaEhSaida[j].tempoIo);
+            else if ( filas.novo[i].entradaEhSaida[j].tipo == MAGNETICA ) {
+                printf("TIPO IO %s POR TEMPO DE CHEGADA %d \n", "MAGNETICA", filas.novo[i].entradaEhSaida[j].tempoDeEntrada);
             }
-            else if ( filas.novo[i].entradaEhSaida[j].tipo == 7 ) {
-                printf("TIPO IO %s POR TEMPO DE CHEGADA %d \n", "IMPRESSORA", filas.novo[i].entradaEhSaida[j].tempoIo);
+            else if ( filas.novo[i].entradaEhSaida[j].tipo == IMPRESSORA ) {
+                printf("TIPO IO %s POR TEMPO DE CHEGADA %d \n", "IMPRESSORA", filas.novo[i].entradaEhSaida[j].tempoDeEntrada);
             }
         }
         
         printf("-----------------------------------------------\n");
+
+        delay(1);
    }
    
     runProcesses(&filas);
@@ -138,128 +145,122 @@ void runProcesses(escalonador *filas) {
     {
         int countQuantum;
 
-        // VERIFIFCO SE TEM ALGUM PROCESSO NOVO PARA ADICIONAR A LISTA DE PRIORIDADES
-        processo pronto = getProcessosNovo(filas->novo, elapsedTime);
-        printf("PROCESSO PRONTO: %d \n", pronto.pid);
+        printf("UNIDADE DE TEMPO: %d \n", elapsedTime);    
+        adicionarProcessoNovoFilaAlta(filas, elapsedTime);
+        
+        // EXECUTA IO              
+        ioAtual = executarProcessoIO(ioAtual, filas);
+        
+        if ( processoAtual.pid == 0 ) {
+            processoAtual = retornarProcessoExecutar(filas);
+        }
 
-        if ( pronto.pid != 0 ) {
-            enqueue(pronto, &filas->altaPrioridade, "altaPrioridade");
+        if ( processoAtual.pid != 0 ) {
+            // LOOP QUANTUM
+            for ( countQuantum = 0; countQuantum < QUANTUM; countQuantum++ )
+            {
+                printf("PROCESSO PRONTO PID: %d \n", processoAtual.pid);
+
+                if ( ioAtual.pid == 0 && processoAtual.entradaEhSaida[0].tipo != 0 && processoAtual.entradaEhSaida[0].tempoDeEntrada <= processoAtual.tempoProcessado ) {
+                    enqueue(processoAtual, &filas->entradaSaida, "entradaSaida");
+                    processoAtual.pid = 0;
+                }
+
+                // SAIR DO QUANTUM QUANDO PROCESSO FOR IO
+                if (processoAtual.pid == 0) {
+                    break;
+                }
+
+                // PROCESSO TERMINOU ANTES DO QUANTUM 
+                if ( processoAtual.tempoProcessado == processoAtual.tempoDeServico ) { 
+                    printf("PROCESSO PID %d TERMINOU.\n", processoAtual.pid);
+                    break;
+                }
+
+                processoAtual.tempoProcessado++;
+                printf("PROCESSO PID %d EM EXECUCAO, TEMPO QUE JA PROCESSOU DE %d E TEMPO RESTANTE %d \n", processoAtual.pid, processoAtual.tempoProcessado, (processoAtual.tempoDeServico - processoAtual.tempoProcessado));
+                elapsedTime++;
+            }
         }
         
-        processo executa;
-        if ( processoAtual.pid == 0 ) {
-            executa = dequeue(&filas->altaPrioridade, "altaPrioridade");
-
-            if ( executa.pid != 0 ) {
-                processoAtual = executa;
-                printf("PROCESSO ATUAL PID: %d \n", processoAtual.pid);
-            }
-            else {
-                executa = dequeue(&filas->baixaPrioridade, "baixaPrioridade");
-
-                if ( executa.pid != 0 ) {
-                    processoAtual = executa;
-                    printf("PROCESSO ATUAL PID: %d \n", processoAtual.pid);
-                }
-            }
-        }
-
-        if ( elapsedTime == 30 )
-        {
-            break;
-        }
-
-        // LOOP CPU
-        for ( countQuantum = 0; countQuantum < QUANTUM; countQuantum++ )
-        {
-            // SE TEM PROCESSO RODANDO
-            if ( processoAtual.pid == 0 ) {
-                break;
-            }
-
-            //SE VAI PARA IO - ERRO AQUI toda fez que passa vai adicionar o processo na entrada e saida
-            if ( processoAtual.entradaEhSaida[0].tempoDeEntrada <= processoAtual.tempoProcessado ) {
-                if ( processoAtual.entradaEhSaida[0].tipo == 3 ) {
-                    printf("PROCESSO PID %d VAI ENTRAR PARA IO %s \n", processoAtual.pid, "DISCO");
-                }
-                else if ( processoAtual.entradaEhSaida[0].tipo == 5 ) {
-                    printf("PROCESSO PID %d VAI ENTRAR PARA IO %s \n", processoAtual.pid, "MAGNETICA");
-                }
-                else if ( processoAtual.entradaEhSaida[0].tipo == 7 ) {
-                    printf("PROCESSO PID %d VAI ENTRAR PARA IO %s \n", processoAtual.pid, "IMPRESSORA");
-                }
-                
-                enqueue(processoAtual, &filas->entradaSaida, "entradaSaida");
-
-                if ( ioAtual.pid == 0 ) {
-                    processo executaIo = dequeue(&filas->entradaSaida, "entradaSaida");
-                    
-                    if( executaIo.pid != 0 ) {
-                        ioAtual = executaIo;
-                    }
-                }
-
-                if ( ioAtual.pid != 0 ) {
-                    if( ioAtual.entradaEhSaida[0].tempoIo == ioAtual.entradaEhSaida[0].tipo ) {
-                        if ( ioAtual.entradaEhSaida[0].tipo == DISCO ) {
-                            // DELETAR IO E ATUALIZAR LISTA
-                            int id;
-                            for (id = 0; id < (QTD_IO-1); id++)
-                            {
-                                ioAtual.entradaEhSaida[id] = ioAtual.entradaEhSaida[id+1];
-                            }
-                            ioAtual.entradaEhSaida[id].tipo = 0;
-
-                            enqueue(ioAtual, &filas->baixaPrioridade, "baixaPrioridade");
-                        }
-                        else {
-                            // DELETAR IO E ATUALIZAR LISTA
-                            int id;
-                            for (id = 0; id < (QTD_IO-1); id++)
-                            {
-                                ioAtual.entradaEhSaida[id] = ioAtual.entradaEhSaida[id+1];
-                            }
-                            ioAtual.entradaEhSaida[id].tipo = 0;
-
-                            enqueue(ioAtual, &filas->altaPrioridade, "altaPrioridade");
-                        }
-                        
-                        ioAtual.pid = 0;
-                    }
-
-                    ioAtual.entradaEhSaida[0].tempoIo++;
-                }
-            }
-
-            // SE PROCESSO FOI PARA IO
-            if ( processoAtual.pid == 0 ) {
-                break;
-            }
-
-            // PARAR LOOP CASO JA TENHA FEITO O PROCESSO POR COMPLETO
-            if ( processoAtual.tempoProcessado == processoAtual.tempoDeServico ) { 
-                printf("PROCESSO PID %d TERMINOU.\n", processoAtual.pid);
-                break;
-            }
-
-            processoAtual.tempoProcessado++;
-            printf("PROCESSO PID %d EM EXECUCAO, TEMPO QUE JA PROCESSOU DE %d E TEMPO RESTANTE %d \n", processoAtual.pid, processoAtual.tempoProcessado, (processoAtual.tempoDeServico - processoAtual.tempoProcessado));
-        }
-
         // PROCESSO NAO FINALIZOU NO PRIMEIRO QUANTUM, VAI PARA ESPERA
         if ( processoAtual.pid != 0 &&  processoAtual.tempoProcessado != processoAtual.tempoDeServico ) {
             enqueue(processoAtual, &filas->baixaPrioridade, "baixaPrioridade");
         }
 
-        processoAtual.pid = 0;
-        elapsedTime++;
-
         int existProcesso = verificarSeExisteProcessoExecutar(filas);
-        if ( !existProcesso ) {
+        if ( !existProcesso && ioAtual.pid == 0 && processoAtual.pid == 0 ) {
             run = 0;
+        }
+        else {
+            processoAtual.pid = 0;
+            elapsedTime++;
         }
     }
     
+}
+
+processo executarProcessoIO(processo ioAtual, escalonador *filas) {
+    if ( ioAtual.pid == 0 ) {
+        processo executaIo = dequeue(&filas->entradaSaida, "entradaSaida");
+        
+        if( executaIo.pid != 0 ) {
+            ioAtual = executaIo;
+        }
+    }
+    
+    if ( ioAtual.pid != 0 ) {
+        if( ioAtual.entradaEhSaida[0].tempoIo != 0 && ioAtual.entradaEhSaida[0].tempoIo == ioAtual.entradaEhSaida[0].tipo ) {
+            if ( ioAtual.entradaEhSaida[0].tipo == DISCO ) {
+                // DELETAR IO E ATUALIZAR LISTA
+                int id;
+                for (id = 0; id < (QTD_IO-1); id++)
+                {
+                    ioAtual.entradaEhSaida[id] = ioAtual.entradaEhSaida[id+1];
+                }
+                ioAtual.entradaEhSaida[id].tipo = 0;
+
+                enqueue(ioAtual, &filas->baixaPrioridade, "baixaPrioridade");
+            }
+            else {
+                // DELETAR IO E ATUALIZAR LISTA
+                int id;
+                for (id = 0; id < (QTD_IO-1); id++)
+                {
+                    ioAtual.entradaEhSaida[id] = ioAtual.entradaEhSaida[id+1];
+                }
+                ioAtual.entradaEhSaida[id].tipo = 0;
+
+                enqueue(ioAtual, &filas->altaPrioridade, "altaPrioridade");
+            }
+            
+            ioAtual.pid = 0;
+        }
+        else {
+            ioAtual.entradaEhSaida[0].tempoIo++;
+            printf("PROCESSO PID %d EM EXECUCAO NO IO, TEMPO QUE JA PROCESSOU DE %d E TEMPO RESTANTE %d \n", ioAtual.pid, ioAtual.entradaEhSaida[0].tempoIo, (ioAtual.entradaEhSaida[0].tipo - ioAtual.entradaEhSaida[0].tempoIo));
+        }
+    }
+
+    return ioAtual;
+}
+
+processo retornarProcessoExecutar(escalonador *filas) {
+    processo executa = dequeue(&filas->altaPrioridade, "altaPrioridade");
+
+    if ( executa.pid == 0 ) {
+        executa = dequeue(&filas->baixaPrioridade, "baixaPrioridade");
+    }         
+
+    return executa;
+}
+
+void adicionarProcessoNovoFilaAlta(escalonador *filas, int elapsedTime) {
+    processo pronto = getProcessosNovo(filas->novo, elapsedTime);
+
+    if ( pronto.pid != 0 ) {
+        enqueue(pronto, &filas->altaPrioridade, "altaPrioridade");
+    }
 }
 
 int verificarSeExisteProcessoExecutar( escalonador *filas ) {
@@ -279,8 +280,6 @@ int verificarSeExisteProcessoExecutar( escalonador *filas ) {
 
     for (int i = 0; i < QTD_PROCESSOS; i++)
     {
-        printf("PID existe novo: %d \n", filas->novo[i].pid);
-        
         if ( filas->novo[i].pid != 0 )
         {
             return 1;
@@ -313,29 +312,39 @@ processo randomProcesso (int pid) {
     int segundos = time(0);
     processo proc;
     srand(segundos);
-    int qtdIO = rand() % 5;
+    int qtdIO = rand() % QTD_IO;
 
     proc.pid = pid;
     proc.tempoChegada = pid*2;
-    proc.tempoDeServico = (rand() % 10)+pid;
+    proc.tempoDeServico = (rand() % 10)+1;
     proc.situacao = PARADO;
     proc.tempoProcessado = 0;
     
-    for (int i = 0; i < qtdIO; i++)
+    for (int i = 0; i < QTD_IO; i++)
     {
-        int qualTipo = (rand() % 3) + 1;
-        proc.entradaEhSaida[i].tempoDeEntrada = (rand() % (proc.tempoDeServico-1))+1;
-        
-        if ( qualTipo == 1 ) {
-            proc.entradaEhSaida[i].tipo = DISCO;
-        }
-        else if ( qualTipo == 2 )
-        {
-            proc.entradaEhSaida[i].tipo = MAGNETICA;
+        if ( i <= qtdIO ) {
+            int qualTipo = (rand() % 3) + 1;
+            
+            if ( qualTipo == 1 ) {
+                proc.entradaEhSaida[i].tipo = DISCO;
+            }
+            else if ( qualTipo == 2 )
+            {
+                proc.entradaEhSaida[i].tipo = MAGNETICA;
+            }
+            else {
+                proc.entradaEhSaida[i].tipo = IMPRESSORA;
+            }
+
+            proc.entradaEhSaida[i].tempoDeEntrada = (rand() % (proc.tempoDeServico-1)) + 1;
+            proc.entradaEhSaida[i].tempoIo = 0;
+            delay(1);
         }
         else {
-            proc.entradaEhSaida[i].tipo = IMPRESSORA;
-        }  
+            proc.entradaEhSaida[i].tipo = 0;
+            proc.entradaEhSaida[i].tempoDeEntrada = 0;
+            proc.entradaEhSaida[i].tempoIo = 0;
+        }
     }
     
     // SORT
@@ -351,6 +360,38 @@ processo randomProcesso (int pid) {
         }
     }
  
+    return proc;          
+}
+
+processo staticProcesso (int pid) {
+    processo proc;
+    
+    proc.pid = pid;
+    proc.tempoChegada = 2;
+    proc.tempoDeServico = 9;
+    proc.situacao = PARADO;
+    proc.tempoProcessado = 0;
+    
+    proc.entradaEhSaida[0].tipo = MAGNETICA;
+    proc.entradaEhSaida[0].tempoDeEntrada = 6;
+    proc.entradaEhSaida[0].tempoIo = 0;
+
+    proc.entradaEhSaida[1].tipo = 0;
+    proc.entradaEhSaida[1].tempoDeEntrada = 0;
+    proc.entradaEhSaida[1].tempoIo = 0;
+
+    proc.entradaEhSaida[2].tipo = 0;
+    proc.entradaEhSaida[2].tempoDeEntrada = 0;
+    proc.entradaEhSaida[2].tempoIo = 0;
+
+    proc.entradaEhSaida[3].tipo = 0;
+    proc.entradaEhSaida[3].tempoDeEntrada = 0;
+    proc.entradaEhSaida[3].tempoIo = 0;
+
+    proc.entradaEhSaida[4].tipo = 0;
+    proc.entradaEhSaida[4].tempoDeEntrada = 0;
+    proc.entradaEhSaida[4].tempoIo = 0;
+    
     return proc;          
 }
 // =============== END ALGORITMO ROUND ROBIN =============== //
@@ -401,13 +442,17 @@ processo dequeue(fifo *f, char nome[20]) {
         return backup;
     }
 }
-
-void printProcessos(fifo *f) {
-    printf("Lendo processos na fila:\n");
-    for (int i = 0; i < f->end; i++)
-    {
-        printf("PID %d\n", f->rows[i].pid);
-    }   
-    printf("-----------------------------\n");
-}
 // =============== END ALGORITMO DE FILA =============== //
+
+void delay(int number_of_seconds)
+{
+    // Converting time into milli_seconds
+    int milli_seconds = 1000 * number_of_seconds;
+ 
+    // Storing start time
+    clock_t start_time = clock();
+ 
+    // looping till required time is not achieved
+    while (clock() < start_time + milli_seconds)
+        ;
+}
