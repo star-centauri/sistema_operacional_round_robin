@@ -9,11 +9,10 @@ enum io { DISCO = 3, MAGNETICA = 4, IMPRESSORA = 7 };
 #define QTD_PROCESSOS 1
 #define QTD_IO 5
 
-/*
-Criar um contrutor chamado TipoIO que conterá:
-. enum io Tipo = guarda o tipo de IO e junto seu tempo de execução "DISCO", "MAGNETICA", "IMPRESSORA"
-. int tempoDeEntrada = o momento que o processo irá entrar na fila de IO
-*/
+/// @brief CUIDA DAS INFORMAÇÕES DE I/O DOS PROCESSADORES
+/// @param tipo = qual o tipo de entrada e saida 
+/// @param tempoDeEntrada = o tempo que o processo sai da execucao cpu e vai para fila de execucao io 
+/// @param tempoIo = contador de quanto tempo ja teve de processo do programa no io
 typedef struct
 {
     enum io tipo;
@@ -21,16 +20,13 @@ typedef struct
     int tempoIo;
 } TipoIO;
 
-/*
-Criar um contrutor chamado PROCESSO que conterá:
-. int PID = identificador do processo
-. int Prioridade = quanto menor maior a prioridade
-. int tempoChegada = tempo que o processo está pronto para execução
-. int tempoDeServico = tempo de execução total do processo
-. enum status situacao = entender em qual situação o processo se encontra em um determinado instante
-. int tempoProcessado = tempo que o processo já executou
-. enum TipoIO entradaEhSaida[5] = as entradas ao IO, quais e em que tempo (caso tenha) 
-*/
+/// @brief CONTEXTO DE INFORMAÇÃO DO PROCESSO
+/// @param pid = identificador do processo
+/// @param tempoChegada = tempo que o processo chegou para solicitar acesso a cpu
+/// @param tempoDeServico = tempo necessario para o processo executar na cpu
+/// @param situacao = situacao atual do processo
+/// @param tempoProcessado = contador de quanto ja teve de processo do programa na cpu
+/// @param entradaEhSaida = lista com a quantidade de acesso de entrada e saida do processo
 typedef struct
 {
     int pid;
@@ -41,11 +37,9 @@ typedef struct
     TipoIO entradaEhSaida[QTD_IO];
 } processo;
 
-/*
-Estrutura de fila
-. processo rows = guarda a lista de processos
-. int end = o indice da ultima posicao vazia da fila
-*/
+/// @brief ESTRUTURA DE UMA FILA
+/// @param rows = array estatico com a quantidade de processos que serao executados
+/// @param end = final da fila
 typedef struct
 {
     processo rows[QTD_PROCESSOS];
@@ -60,6 +54,12 @@ Criar um contrutor chamado ESCALONADOR que conterá:
 . Fila entradaSaida
 . lista de novo: todos os processos
 */
+
+/// @brief ESTRUTURA DE FILAS DE UM ESCALONADOR
+/// @param altaPrioridade = fila que guarda os processos de alta prioridade de execucao na CPU
+/// @param baixaPrioridade = fila que guarda os processos de baixa prioridade de execucao na CPU
+/// @param entradaSaida = fila que guarda os processos que solicitaram entrada e saida
+/// @param novo = guarda os processos novos a espera de entrar na CPU
 typedef struct
 {
     fifo altaPrioridade;
@@ -68,35 +68,31 @@ typedef struct
     processo novo[QTD_PROCESSOS];
 } escalonador;
 
-fifo create();
+/// @brief TODAS AS FUNCOES DO PROJETO 
 void enqueue(processo dado, fifo *f, char nome[20]);
-processo dequeue(fifo *f, char nome[20]);
 void runProcesses(escalonador *filas);
+void delay(int number_of_seconds);
+void adicionarProcessoNovoFilaAlta(escalonador *filas, int elapsedTime);
+int verificarSeExisteProcessoExecutar( escalonador *filas );
+processo dequeue(fifo *f, char nome[20]);
 processo getProcessosNovo(processo novo[QTD_PROCESSOS], int elapsedTime);
 processo randomProcesso (int pid);
-int verificarSeExisteProcessoExecutar( escalonador *filas );
-void delay(int number_of_seconds);
 processo staticProcesso (int pid);
-void adicionarProcessoNovoFilaAlta(escalonador *filas, int elapsedTime);
 processo retornarProcessoExecutar(escalonador *filas);
 processo executarProcessoIO(processo ioAtual, escalonador *filas);
+fifo create();
 
 int main() {
-    /*
-    Menu:
-     1 - Introdução
-     2 - Executar os processos
-     3 - Parar processos
-     4 - Detalhes
-    */
+    // INICIALIZACAO DAS FILAS
    escalonador filas;
    filas.altaPrioridade = create();
    filas.baixaPrioridade = create();
    filas.entradaSaida = create();
 
+    // CRIACAO DOS PROCESSOS DO PROGRAMA
    for (int i = 0; i < QTD_PROCESSOS; i++)
    {
-        //filas.novo[i] = staticProcesso(i+1);
+        //filas.novo[i] = staticProcesso(i+1); UM TESTE
         filas.novo[i] = randomProcesso(i+1);
 
         printf("-----------------------------------------------\n");
@@ -130,6 +126,9 @@ int main() {
 }
 
 // =============== BEGIN ALGORITMO ROUND ROBIN =============== //
+
+/// @brief A FUNCAO MESTRE, QUE EXECUTA TUDO
+/// @param filas 
 void runProcesses(escalonador *filas) {
     int run = 1; // MANTER EXECUÇÃO DO ALGORITMO ATÉ SE SOLICITADO PARAR
     int elapsedTime = 0; // SIMULA O TEMPO CORRIDO DENTRO DO LOOP (VAI SER IMPORTANTE PARA O TEMPO DE CHEGADA)
@@ -143,7 +142,7 @@ void runProcesses(escalonador *filas) {
     // LOOP DE TODA EXECUÇÃO DO ALGORITMO
     while (run)
     {
-        int countQuantum;
+        int countQuantum; // CONTA OS QUANTUM DO PROCESSO ATUAL NA CPU
 
         printf("UNIDADE DE TEMPO: %d \n", elapsedTime);    
         adicionarProcessoNovoFilaAlta(filas, elapsedTime);
@@ -151,6 +150,7 @@ void runProcesses(escalonador *filas) {
         // EXECUTA IO              
         ioAtual = executarProcessoIO(ioAtual, filas);
         
+        // BUSCAR PROCESSO PRONTO
         if ( processoAtual.pid == 0 ) {
             processoAtual = retornarProcessoExecutar(filas);
         }
@@ -178,16 +178,18 @@ void runProcesses(escalonador *filas) {
                 }
 
                 processoAtual.tempoProcessado++;
-                printf("PROCESSO PID %d EM EXECUCAO, TEMPO QUE JA PROCESSOU DE %d E TEMPO RESTANTE %d \n", processoAtual.pid, processoAtual.tempoProcessado, (processoAtual.tempoDeServico - processoAtual.tempoProcessado));
+                printf("PROCESSO PID %d EM EXECUCAO NA CPU, TEMPO QUE JA PROCESSOU DE %d E TEMPO RESTANTE %d \n", processoAtual.pid, processoAtual.tempoProcessado, (processoAtual.tempoDeServico - processoAtual.tempoProcessado));
                 elapsedTime++;
+                printf("UNIDADE DE TEMPO: %d \n", elapsedTime); 
             }
         }
         
-        // PROCESSO NAO FINALIZOU NO PRIMEIRO QUANTUM, VAI PARA ESPERA
+        // PROCESSO NAO FINALIZOU NO PRIMEIRO QUANTUM, VAI PARA FILA DE BAIXA PRIORIDADE (PREEMPCAO)
         if ( processoAtual.pid != 0 &&  processoAtual.tempoProcessado != processoAtual.tempoDeServico ) {
             enqueue(processoAtual, &filas->baixaPrioridade, "baixaPrioridade");
         }
 
+        // REGRA DE PARADA DO WHILE
         int existProcesso = verificarSeExisteProcessoExecutar(filas);
         if ( !existProcesso && ioAtual.pid == 0 && processoAtual.pid == 0 ) {
             run = 0;
@@ -200,6 +202,10 @@ void runProcesses(escalonador *filas) {
     
 }
 
+/// @brief CUIDA DA EXECUCAO DO PROCESSO NO IO E O RETORNA A FILA DE BAIXA PRIORIDADE AO TERMINO
+/// @param ioAtual 
+/// @param filas 
+/// @return processo
 processo executarProcessoIO(processo ioAtual, escalonador *filas) {
     if ( ioAtual.pid == 0 ) {
         processo executaIo = dequeue(&filas->entradaSaida, "entradaSaida");
@@ -245,6 +251,9 @@ processo executarProcessoIO(processo ioAtual, escalonador *filas) {
     return ioAtual;
 }
 
+/// @brief RETORNA O PROCESSO QUE ESTA NA FILA DE ALTA PRIORIDADE, SENAO, O DE BAIXA
+/// @param filas 
+/// @return processo
 processo retornarProcessoExecutar(escalonador *filas) {
     processo executa = dequeue(&filas->altaPrioridade, "altaPrioridade");
 
@@ -255,6 +264,9 @@ processo retornarProcessoExecutar(escalonador *filas) {
     return executa;
 }
 
+/// @brief VERIFICA SE TEM PROCESSO NOVO NO TEMPO CORRIDO E O ADICIONA NA FILA DE ALTA PRIORIDADE
+/// @param filas 
+/// @param elapsedTime 
 void adicionarProcessoNovoFilaAlta(escalonador *filas, int elapsedTime) {
     processo pronto = getProcessosNovo(filas->novo, elapsedTime);
 
@@ -263,6 +275,9 @@ void adicionarProcessoNovoFilaAlta(escalonador *filas, int elapsedTime) {
     }
 }
 
+/// @brief VERIFICA DE TODAS AS FILAS ESTAO VAZIAS, SE NAO TEM NOVOS PROCESSOS E SE NAO TEM NENHUM PROCESSO EXECUTANDO NA CPU OU IO
+/// @param filas 
+/// @return flag
 int verificarSeExisteProcessoExecutar( escalonador *filas ) {
     if ( filas->altaPrioridade.end != 0 )
     {
@@ -308,6 +323,88 @@ processo getProcessosNovo(processo novo[QTD_PROCESSOS], int elapsedTime) {
     return pronto;
 }
 
+// =============== END ALGORITMO ROUND ROBIN =============== //
+
+// =============== BEGIN ALGORITMO DE FILA =============== //
+
+/// @brief INICIALIZA A CONTRUCAO DE UMA FILA
+/// @return fifo
+fifo create() {
+    fifo fila;
+
+    for (int i = 0; i < QTD_PROCESSOS; i++)
+    {
+        fila.rows[i].pid = 0;
+    }
+    
+    fila.end = 0;
+
+    return fila;
+}
+
+/// @brief INSERE DADOS NO FINAL DA FILA
+/// @param dado 
+/// @param f 
+/// @param nome 
+void enqueue(processo dado, fifo *f, char nome[20]) {
+    if ( f->end == QTD_PROCESSOS ) {
+        printf("FILA %s ESTA CHEIA!\n", nome);
+    }
+    else {
+        f->rows[f->end] = dado;
+        f->end++;
+        printf("PROCESSO DE PID %d ADICIONADO A FILA %s \n", dado.pid, nome);
+    }
+}
+
+/// @brief REMOVE E RETORNA O PRIMEIRO DADO DA FILA
+/// @param f 
+/// @param nome 
+/// @return processo
+processo dequeue(fifo *f, char nome[20]) {
+    processo backup;
+
+    if ( f->end == 0 ) {
+        printf("FILA %s VAZIA!\n", nome);
+        backup.pid = 0;
+        return backup;
+    }
+    else {
+        backup = f->rows[0];
+
+        for (int i = 0; i < f->end; i++)
+        {
+            f->rows[i] = f->rows[i+1];
+        }
+        
+        f->end--;
+        printf("PROCESSO DE PID %d REMOVIDO DA FILA %s \n", backup.pid, nome);
+        return backup;
+    }
+}
+
+// =============== END ALGORITMO DE FILA =============== //
+
+// =============== BEGIN AUXILIARES =============== //
+
+/// @brief SIMULACAO DE UM TIMEOUT
+/// @param number_of_seconds 
+void delay(int number_of_seconds)
+{
+    // Converting time into milli_seconds
+    int milli_seconds = 1000 * number_of_seconds;
+ 
+    // Storing start time
+    clock_t start_time = clock();
+ 
+    // looping till required time is not achieved
+    while (clock() < start_time + milli_seconds)
+        ;
+}
+
+/// @brief CRIA DE FORMA RANDOMICA OS PROCESSOS 
+/// @param pid 
+/// @return processo
 processo randomProcesso (int pid) {
     int segundos = time(0);
     processo proc;
@@ -349,9 +446,9 @@ processo randomProcesso (int pid) {
     
     // SORT
     int i, j;
-    for (i = 0; i < 4; i++) {
+    for (i = 0; i < (qtdIO-1); i++) {
         // Last i elements are already in place
-        for (j = 0; j < 5 - i - 1; j++) {
+        for (j = 0; j < (qtdIO - i - 1); j++) {
             if (proc.entradaEhSaida[j].tempoDeEntrada > proc.entradaEhSaida[j+1].tempoDeEntrada) {
                 TipoIO temp = proc.entradaEhSaida[j];
                 proc.entradaEhSaida[j] = proc.entradaEhSaida[j+1];
@@ -363,6 +460,9 @@ processo randomProcesso (int pid) {
     return proc;          
 }
 
+/// @brief UMA FUNCAO MESTRE PARA TENTAR A VERACIDADE DOS DADOS COM VALORES ESTATICOS DE PROCESSO
+/// @param pid 
+/// @return processo
 processo staticProcesso (int pid) {
     processo proc;
     
@@ -394,65 +494,5 @@ processo staticProcesso (int pid) {
     
     return proc;          
 }
-// =============== END ALGORITMO ROUND ROBIN =============== //
 
-// =============== BEGIN ALGORITMO DE FILA =============== //
-fifo create() {
-    fifo fila;
-
-    for (int i = 0; i < QTD_PROCESSOS; i++)
-    {
-        fila.rows[i].pid = 0;
-    }
-    
-    fila.end = 0;
-
-    return fila;
-}
-
-void enqueue(processo dado, fifo *f, char nome[20]) {
-    if ( f->end == QTD_PROCESSOS ) {
-        printf("FILA %s ESTA CHEIA!\n", nome);
-    }
-    else {
-        f->rows[f->end] = dado;
-        f->end++;
-        printf("PROCESSO DE PID %d ADICIONADO A FILA %s \n", dado.pid, nome);
-    }
-}
-
-processo dequeue(fifo *f, char nome[20]) {
-    processo backup;
-
-    if ( f->end == 0 ) {
-        printf("FILA %s VAZIA!\n", nome);
-        backup.pid = 0;
-        return backup;
-    }
-    else {
-        backup = f->rows[0];
-
-        for (int i = 0; i < f->end; i++)
-        {
-            f->rows[i] = f->rows[i+1];
-        }
-        
-        f->end--;
-        printf("PROCESSO DE PID %d REMOVIDO DA FILA %s \n", backup.pid, nome);
-        return backup;
-    }
-}
-// =============== END ALGORITMO DE FILA =============== //
-
-void delay(int number_of_seconds)
-{
-    // Converting time into milli_seconds
-    int milli_seconds = 1000 * number_of_seconds;
- 
-    // Storing start time
-    clock_t start_time = clock();
- 
-    // looping till required time is not achieved
-    while (clock() < start_time + milli_seconds)
-        ;
-}
+// =============== END AUXILIARES =============== //
