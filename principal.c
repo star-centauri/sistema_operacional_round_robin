@@ -440,17 +440,8 @@ void printProcessos(fifo *f) {
 }
 // =============== END ALGORITMO DE FILA =============== //
 
-
+// ================ ESCREVE ARQUIVO ==================== //
 void escreveArquivo(char string[], int pid){
-    //printf("%d ----------------------------------------",proc->pid);
-
-    /*  printf("-----------------------------------------------\n");
-
-        printf("PROCESSO CRIADO PID: %d \n", novo->pid);
-        printf("TEMPO DE CHEGADA: %d \n", novo->tempoChegada);
-        printf("TEMPO DE SERVICO: %d \n", novo->tempoDeServico); */
-
-    
     char buff[10];    
     sprintf(buff, "%d", pid);
     char arquivo[20] = "processo";
@@ -459,12 +450,11 @@ void escreveArquivo(char string[], int pid){
 
 	FILE *pa;
 	pa = fopen(arquivo, "a+");
-	if (pa == NULL){
+	
+    if (pa == NULL){
 		printf("Arquivo nao pode ser aberto.");
 	}
 
 	fputs(string, pa);
 	fclose(pa);	
-
-
 }
