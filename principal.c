@@ -524,7 +524,7 @@ processo staticProcesso (int pid) {
 /// @param pid 
 void escreveArquivo(char string[], int pid){
     
-    char buff[10];    
+    char buff[100];    
     sprintf(buff, "%d", pid);
     char arquivo[20] = "processo";
     strcat(arquivo, buff);
