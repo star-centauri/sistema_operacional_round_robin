@@ -1,12 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <string.h>
 
 enum status { PARADO, BLOQUEADO, EXECUTANDO_CPU, EXECUTANDO_IO };
 enum io { DISCO = 3, MAGNETICA = 4, IMPRESSORA = 7 };
 
 #define QUANTUM 5
-#define QTD_PROCESSOS 1
+#define QTD_PROCESSOS 10
 #define QTD_IO 5
 
 /// @brief CUIDA DAS INFORMAÇÕES DE I/O DOS PROCESSADORES
@@ -46,15 +47,6 @@ typedef struct
     int end;
 } fifo;
 
-
-/*
-Criar um contrutor chamado ESCALONADOR que conterá:
-. Fila de alta prioridade
-. Fila de baixa prioridade
-. Fila entradaSaida
-. lista de novo: todos os processos
-*/
-
 /// @brief ESTRUTURA DE FILAS DE UM ESCALONADOR
 /// @param altaPrioridade = fila que guarda os processos de alta prioridade de execucao na CPU
 /// @param baixaPrioridade = fila que guarda os processos de baixa prioridade de execucao na CPU
@@ -73,6 +65,7 @@ void enqueue(processo dado, fifo *f, char nome[20]);
 void runProcesses(escalonador *filas);
 void delay(int number_of_seconds);
 void adicionarProcessoNovoFilaAlta(escalonador *filas, int elapsedTime);
+void escreveArquivo(char string[], int pid);
 int verificarSeExisteProcessoExecutar( escalonador *filas );
 processo dequeue(fifo *f, char nome[20]);
 processo getProcessosNovo(processo novo[QTD_PROCESSOS], int elapsedTime);
@@ -92,26 +85,41 @@ int main() {
     // CRIACAO DOS PROCESSOS DO PROGRAMA
    for (int i = 0; i < QTD_PROCESSOS; i++)
    {
-        //filas.novo[i] = staticProcesso(i+1); UM TESTE
+
         filas.novo[i] = randomProcesso(i+1);
+        char str[100];
 
         printf("-----------------------------------------------\n");
 
         printf("PROCESSO CRIADO PID: %d \n", filas.novo[i].pid);
+        sprintf(str, "PROCESSO CRIADO PID: %d \n", filas.novo[i].pid);
+        escreveArquivo(str, filas.novo[i].pid);
+        
         printf("TEMPO DE CHEGADA: %d \n", filas.novo[i].tempoChegada);
+        sprintf(str, "TEMPO DE CHEGADA: %d \n", filas.novo[i].tempoChegada);
+        escreveArquivo(str, filas.novo[i].pid);
+
         printf("TEMPO DE SERVICO: %d \n", filas.novo[i].tempoDeServico);
+        sprintf(str, "TEMPO DE SERVICO: %d \n", filas.novo[i].tempoDeServico);
+        escreveArquivo(str, filas.novo[i].pid);
 
         for (int j = 0; j < QTD_IO; j++)
         {
             if ( filas.novo[i].entradaEhSaida[j].tipo == DISCO )
             {
                 printf("TIPO IO %s POR TEMPO DE CHEGADA %d \n", "DISCO", filas.novo[i].entradaEhSaida[j].tempoDeEntrada);
+                sprintf(str, "TIPO IO %s POR TEMPO DE CHEGADA %d \n", "DISCO", filas.novo[i].entradaEhSaida[j].tempoDeEntrada);
+                escreveArquivo(str, filas.novo[i].pid);
             }
             else if ( filas.novo[i].entradaEhSaida[j].tipo == MAGNETICA ) {
                 printf("TIPO IO %s POR TEMPO DE CHEGADA %d \n", "MAGNETICA", filas.novo[i].entradaEhSaida[j].tempoDeEntrada);
+                sprintf(str, "TIPO IO %s POR TEMPO DE CHEGADA %d \n", "MAGNETICA", filas.novo[i].entradaEhSaida[j].tempoDeEntrada);
+                escreveArquivo(str, filas.novo[i].pid);
             }
             else if ( filas.novo[i].entradaEhSaida[j].tipo == IMPRESSORA ) {
                 printf("TIPO IO %s POR TEMPO DE CHEGADA %d \n", "IMPRESSORA", filas.novo[i].entradaEhSaida[j].tempoDeEntrada);
+                sprintf(str, "TIPO IO %s POR TEMPO DE CHEGADA %d \n", "IMPRESSORA", filas.novo[i].entradaEhSaida[j].tempoDeEntrada);
+                escreveArquivo(str, filas.novo[i].pid);
             }
         }
         
@@ -132,6 +140,7 @@ int main() {
 void runProcesses(escalonador *filas) {
     int run = 1; // MANTER EXECUÇÃO DO ALGORITMO ATÉ SE SOLICITADO PARAR
     int elapsedTime = 0; // SIMULA O TEMPO CORRIDO DENTRO DO LOOP (VAI SER IMPORTANTE PARA O TEMPO DE CHEGADA)
+    char str[200];
     
     processo processoAtual;
     processoAtual.pid = 0; 
@@ -159,9 +168,13 @@ void runProcesses(escalonador *filas) {
             // LOOP QUANTUM
             for ( countQuantum = 0; countQuantum < QUANTUM; countQuantum++ )
             {
-                printf("PROCESSO PRONTO PID: %d \n", processoAtual.pid);
+                printf("PROCESSO PRONTO PARA EXECUTAR PID: %d \n", processoAtual.pid);
+                sprintf(str, "PROCESSO PRONTO PARA EXECUTAR PID %d TEMPO %d \n", processoAtual.pid, elapsedTime);
+                escreveArquivo(str, processoAtual.pid);
 
                 if ( ioAtual.pid == 0 && processoAtual.entradaEhSaida[0].tipo != 0 && processoAtual.entradaEhSaida[0].tempoDeEntrada <= processoAtual.tempoProcessado ) {
+                    sprintf(str, "PROCESSO PID %d ENTROU NA FILA DE I/O NO TEMPO %d.\n", processoAtual.pid, elapsedTime);
+                    escreveArquivo(str, processoAtual.pid);
                     enqueue(processoAtual, &filas->entradaSaida, "entradaSaida");
                     processoAtual.pid = 0;
                 }
@@ -174,11 +187,16 @@ void runProcesses(escalonador *filas) {
                 // PROCESSO TERMINOU ANTES DO QUANTUM 
                 if ( processoAtual.tempoProcessado == processoAtual.tempoDeServico ) { 
                     printf("PROCESSO PID %d TERMINOU.\n", processoAtual.pid);
+                    sprintf(str, "PROCESSO PID %d TERMINOU NO TEMPO %d.\n", processoAtual.pid, elapsedTime);
+                    escreveArquivo(str, processoAtual.pid);
                     break;
                 }
 
                 processoAtual.tempoProcessado++;
                 printf("PROCESSO PID %d EM EXECUCAO NA CPU, TEMPO QUE JA PROCESSOU DE %d E TEMPO RESTANTE %d \n", processoAtual.pid, processoAtual.tempoProcessado, (processoAtual.tempoDeServico - processoAtual.tempoProcessado));
+                sprintf(str, "PROCESSO PID %d EM EXECUCAO NA CPU, TEMPO QUE JA PROCESSOU DE %d E TEMPO RESTANTE %d \n", processoAtual.pid, processoAtual.tempoProcessado, (processoAtual.tempoDeServico - processoAtual.tempoProcessado));
+                escreveArquivo(str, processoAtual.pid);
+
                 elapsedTime++;
                 printf("UNIDADE DE TEMPO: %d \n", elapsedTime); 
             }
@@ -207,6 +225,8 @@ void runProcesses(escalonador *filas) {
 /// @param filas 
 /// @return processo
 processo executarProcessoIO(processo ioAtual, escalonador *filas) {
+    char str[200];
+
     if ( ioAtual.pid == 0 ) {
         processo executaIo = dequeue(&filas->entradaSaida, "entradaSaida");
         
@@ -245,6 +265,8 @@ processo executarProcessoIO(processo ioAtual, escalonador *filas) {
         else {
             ioAtual.entradaEhSaida[0].tempoIo++;
             printf("PROCESSO PID %d EM EXECUCAO NO IO, TEMPO QUE JA PROCESSOU DE %d E TEMPO RESTANTE %d \n", ioAtual.pid, ioAtual.entradaEhSaida[0].tempoIo, (ioAtual.entradaEhSaida[0].tipo - ioAtual.entradaEhSaida[0].tempoIo));
+            sprintf(str, "PROCESSO PID %d EM EXECUCAO NO IO, TEMPO QUE JA PROCESSOU DE %d E TEMPO RESTANTE %d \n", ioAtual.pid, ioAtual.entradaEhSaida[0].tempoIo, (ioAtual.entradaEhSaida[0].tipo - ioAtual.entradaEhSaida[0].tempoIo));
+            escreveArquivo(str, ioAtual.pid);
         }
     }
 
@@ -495,4 +517,24 @@ processo staticProcesso (int pid) {
     return proc;          
 }
 
+/// @brief CRIA UM LOG DE CADA PROCESSO
+/// @param string 
+/// @param pid 
+void escreveArquivo(char string[], int pid){
+    
+    char buff[10];    
+    sprintf(buff, "%d", pid);
+    char arquivo[20] = "processo";
+    strcat(arquivo, buff);
+    strcat(arquivo,".txt");
+
+	FILE *pa;
+	pa = fopen(arquivo, "a+");
+	if (pa == NULL){
+		printf("Arquivo nao pode ser aberto.");
+	}
+
+	fputs(string, pa);
+	fclose(pa);	
+}
 // =============== END AUXILIARES =============== //
