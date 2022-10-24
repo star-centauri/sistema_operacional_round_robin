@@ -172,7 +172,7 @@ void runProcesses(escalonador *filas) {
                 sprintf(str, "PROCESSO PRONTO PARA EXECUTAR PID %d TEMPO %d \n", processoAtual.pid, elapsedTime);
                 escreveArquivo(str, processoAtual.pid);
 
-                if ( ioAtual.pid == 0 && processoAtual.entradaEhSaida[0].tipo != 0 && processoAtual.entradaEhSaida[0].tempoDeEntrada <= processoAtual.tempoProcessado ) {
+                if ( (ioAtual.pid == 0 || ioAtual.pid != processoAtual.pid) && processoAtual.entradaEhSaida[0].tipo != 0 && processoAtual.entradaEhSaida[0].tempoDeEntrada <= elapsedTime ) {
                     sprintf(str, "PROCESSO PID %d ENTROU NA FILA DE I/O NO TEMPO %d.\n", processoAtual.pid, elapsedTime);
                     escreveArquivo(str, processoAtual.pid);
                     enqueue(processoAtual, &filas->entradaSaida, "entradaSaida");
@@ -455,7 +455,9 @@ processo randomProcesso (int pid) {
                 proc.entradaEhSaida[i].tipo = IMPRESSORA;
             }
 
-            proc.entradaEhSaida[i].tempoDeEntrada = (rand() % (proc.tempoDeServico-1)) + 1;
+            int upper = proc.tempoChegada + proc.tempoDeServico;
+            int lower = proc.tempoChegada;
+            proc.entradaEhSaida[i].tempoDeEntrada = (rand() % (upper - lower + 1)) + lower;
             proc.entradaEhSaida[i].tempoIo = 0;
             delay(1);
         }
